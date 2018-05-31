@@ -1,8 +1,8 @@
-FROM ubuntu
+FROM ubuntu:16.04
 WORKDIR /codec_compare
 
 # DEPENDENCIES
-RUN apt-get clean && apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y \
     wget \
     unzip \
     g++ \
@@ -13,9 +13,7 @@ RUN apt-get clean && apt-get update && apt-get install -y \
     yasm \
     subversion \
     python \
-    imagemagick \
-    python-pip && \
-    pip install plotly
+    imagemagick
 
 # JPEG
 RUN mkdir -p /tools && \
@@ -41,15 +39,17 @@ RUN mkdir -p /tools && \
 # WEBP
 RUN mkdir -p /tools && \
     cd /tools && \
-    wget -O libwebp.tar.gz https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-0.6.1-linux-x86-64.tar.gz  && \
+    wget -O libwebp.tar.gz https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.0.0-linux-x86-64.tar.gz  && \
     tar xvzf libwebp.tar.gz && \
     rm -f libwebp.tar.gz
+RUN apt-get install libglu1 -y
+RUN apt-get install libxi6 -y
 
 # HEVC
 RUN mkdir -p /tools && \
     cd /tools && \
-    svn checkout https://hevc.hhi.fraunhofer.de/svn/svn_HEVCSoftware/tags/HM-16.9+SCM-8.0/ && \
-    cd HM-16.9+SCM-8.0/build/linux && \
+    svn checkout https://hevc.hhi.fraunhofer.de/svn/svn_HEVCSoftware/tags/HM-16.18+SCM-8.7/ && \
+    cd HM-16.18+SCM-8.7/build/linux && \
     make
 
 # VMAF, FFMPEG
@@ -68,6 +68,18 @@ RUN mkdir -p /tools && \
     cd ffmpeg-3.4.1 && \
     ./configure --enable-libvmaf && \
     make install
+
+# DIFFTEST_NG
+RUN mkdir -p /tools && \
+    cd /tools && \
+    wget -O difftest_ng-master.zip https://github.com/thorfdbg/difftest_ng/archive/master.zip  && \
+    unzip difftest_ng-master.zip && \
+    rm -f difftest_ng-master.zip && \
+    cd difftest_ng-master && \
+    ./configure && \
+    make && \
+    make install
+    
 
 # TO ADD ANOTHER
 # ADD /local/path/to/bin /tools/bin

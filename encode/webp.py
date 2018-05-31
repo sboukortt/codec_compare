@@ -15,7 +15,7 @@ if pix_fmt != "yuv420p":
     print "WebP is 420 only"
     sys.exit(1)
 
-webp_bin = '/tools/libwebp-0.6.1-linux-x86-64/bin/cwebp'
+webp_bin = '/tools/libwebp-1.0.0-linux-x86-64/bin/cwebp'
 
 qty_min, qty_max = 0, 100
 quality = qty_max / 2

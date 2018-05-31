@@ -9,7 +9,7 @@ width   = sys.argv[3]
 height  = sys.argv[4]
 pix_fmt = sys.argv[5]
 
-hevc_bin = '/tools/HM-16.9+SCM-8.0/bin/TAppDecoderStatic'
+hevc_bin = '/tools/HM-16.18+SCM-8.7/bin/TAppDecoderStatic'
 tmp_dec  = '/tmp/tmp.rgb'
 
 if pix_fmt == "ppm":
