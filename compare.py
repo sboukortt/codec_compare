@@ -27,7 +27,7 @@ def listdir_full_path(directory):
 def get_dimensions(image, classname):
     """ given a source image, return dimensions
     """
-    if classname.find("classA_10bitYUV") or classname == "classE":
+    if "classA_10bitYUV" in classname or classname == "classE":
         size = os.path.basename(image).split('_')[2]
         try:
             dimension_cmd = ["identify", '-size', size, '-format', '%w,%h,%z', image]
@@ -223,7 +223,7 @@ def create_derivatives(image, classname):
         else:
             derivative_images.append((ppm_dest, 'ppm'))
 
-    if classname.find("classB"):
+    if "classB" in classname:
         return derivative_images
     else:
         for subsampling in ['yuv420p']:
@@ -278,6 +278,8 @@ def main():
     args = parser.parse_args()
     classpath = args.path
     classname = classpath.split('/')[1]
+    if classname == "classB_12bit":
+        classname = "classA_10bit"
 
     images = set(listdir_full_path(classpath))
     if len(images) <= 0:
@@ -306,9 +308,8 @@ def main():
         if int(height) % 2:
             height = str(int(height) - 1)
         imgfmt = os.path.splitext(image)[1]
-        if classname.find("classA_10bitYUV"):
-            derivative_image = image
-            pix_fmt = 'yuv420p'
+        if "classA_10bitYUV" in classname:
+            derivative_images.append((image, 'yuv420p'))
         else:
             derivative_images = create_derivatives(image, classname)
             name, imgfmt = os.path.splitext(image)
