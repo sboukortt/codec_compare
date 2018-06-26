@@ -51,12 +51,13 @@ Example: `./compare.py images_classes/classA_8bit/`
 #### Notes from PINAR:
 If you want to exclude a codec, remove the <codecname>.py file from both `./encode` and `./decode` folders.
 
-If you are going to encode and decode images with bit depth greater than 8bpp, after building the container you have to enable RExt__HIGH_BIT_DEPTH_SUPPORT. Here's how:
+If you are going to encode and decode images with bit depth greater than 10bpp, after building the container you have to enable RExt__HIGH_BIT_DEPTH_SUPPORT. Here's how:
 
 After you build and run the container, type the following commands:
 
 apt-get update
 apt-get install vim
+Y
 vi /tools/HM-16.18+SCM-8.7/source/Lib/TLibCommon/TypeDef.h
 
 In line 132 you have #define RExt__HIGH_BIT_DEPTH_SUPPORT set to 0. You need to change this to 1, save and quit (press i to switch to insert mode, when you finish changes press ESC to exit insert mode, then type :wq and hit ENTER. Then build HM again.
