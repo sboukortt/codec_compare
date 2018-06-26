@@ -278,8 +278,6 @@ def main():
     args = parser.parse_args()
     classpath = args.path
     classname = classpath.split('/')[1]
-    if classname == "classB_12bit":
-        classname = "classA_10bit"
 
     images = set(listdir_full_path(classpath))
     if len(images) <= 0:
