@@ -27,7 +27,20 @@ def listdir_full_path(directory):
 def get_dimensions(image, classname):
     """ given a source image, return dimensions
     """
-    if "classA_10bitYUV" in classname or classname == "classE":
+    start, ext = os.path.splitext(image)
+    if ext == '.yuv':
+        bitdepth = "8"
+        res_split = start.split('x')
+        width_split = res_split[0].split('_')
+        width = width_split[-1]
+        height_split = res_split[-1].split('_')
+        m = res_split[-1].find("bit")
+        if res_split[-1][m-2] == "_":
+            depth = res_split[-1][m-1]
+        else:
+            depth = res_split[-1][m-2:m]
+        height = height_split[0]
+    elif classname == "classE_exr":
         size = os.path.basename(image).split('_')[2]
         try:
             dimension_cmd = ["identify", '-size', size, '-format', '%w,%h,%z', image]
