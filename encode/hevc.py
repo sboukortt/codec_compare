@@ -13,12 +13,12 @@ pix_fmt    = sys.argv[6]
 depth      = sys.argv[7]
 
 hevc_bin = '/tools/HM-16.18+SCM-8.7/bin/TAppEncoderStatic'
-if depth == '12' or depth == '16':
+if depth == '12' or depth == '16' or depth == '32':
     hevc_cfg = '/tools/HM-16.18+SCM-8.7/cfg/encoder_intra_main_rext.cfg'
 else:
     hevc_cfg = '/tools/HM-16.18+SCM-8.7/cfg/encoder_intra_main_scc.cfg'
 
-if pix_fmt == "ppm":
+if pix_fmt == "ppm" or pix_fmt == 'pfm':
     chroma_fmt = "444"
     try:
         image_src_gbr = '/tmp/tmp.rgb'
@@ -36,14 +36,15 @@ elif pix_fmt == "yuv422p":
 elif pix_fmt == "yuv420p":
     chroma_fmt = "420"
 
-
 qp_min, qp_max = 0, 51
 qp = qp_max / 2
 step = qp / 2
 
 for i in range(0, int(math.floor(math.log(qp_max)/math.log(2)))):
+    if depth == '32':
+        depth = '16'
     cmd = [hevc_bin, "-c", hevc_cfg, "-f", "1", "-fr", "1", "-q", str(qp), "-wdt", width, "-hgt", height,
-           "--InputChromaFormat=%s" % (chroma_fmt), "--InternalBitDepth=%s" % depth,
+           "--InputChromaFormat=%s" % (chroma_fmt), "--InternalBitDepth=%s" % (depth), 
            "--ConformanceWindowMode", "1", "-i", image_src, "-b", image_out, "-o", "/dev/null"
           ]
     print " ".join(cmd)

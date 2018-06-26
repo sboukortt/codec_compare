@@ -50,7 +50,7 @@ RUN mkdir -p /tools && \
     cd /tools && \
     svn checkout https://hevc.hhi.fraunhofer.de/svn/svn_HEVCSoftware/tags/HM-16.18+SCM-8.7/ && \
     cd HM-16.18+SCM-8.7/build/linux && \
-    make all_highbitdepth
+    make
 
 # VMAF, FFMPEG
 RUN mkdir -p /tools && \
@@ -79,7 +79,7 @@ RUN mkdir -p /tools && \
     ./configure && \
     make && \
     make install
-    
+
 
 # TO ADD ANOTHER
 # ADD /local/path/to/bin /tools/bin

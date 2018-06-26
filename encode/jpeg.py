@@ -18,9 +18,7 @@ depth      = sys.argv[7]
 
 jpg_bin = '/tools/jpeg/jpeg'
 
-print pix_fmt
-
-if pix_fmt == "ppm" or pix_fmt == "yuv444p" or pix_fmt == 'pfm':
+if pix_fmt == "ppm" or pix_fmt == "yuv444p" or pix_fmt == 'pfm' or pix_fmt == 'pgm' or pix_fmt == 'tif':
     subsampling = "1x1,1x1,1x1"
 elif pix_fmt == "yuv422p":
     image_src = image_src.replace("/yuv422p/", "/ppm/")
@@ -36,20 +34,20 @@ step = quality / 2
 
 for i in range(0, int(math.floor(math.log(qty_max)/math.log(2)))):
     if pix_fmt == 'pfm':
-        cmd = [jpg_bin, '-q', str(quality), 'Q', str(Quality), '-qt', '3', '-h', '-profile', 'c', '-rR', '4',
+        cmd = [jpg_bin, '-q', str(quality), '-Q', str(Quality), '-qt', '3', '-h', '-profile', 'c', '-rR', '4',
                image_src, image_out]
-    elif int(depth) > 8 and pix_fmt == 'ppm':
+    elif int(depth) > 8 and (pix_fmt == 'ppm' or pix_fmt == "yuv444p" or pix_fmt == 'pgm' or pix_fmt == 'tif'):
         if int(depth) == 10:
-            cmd = [jpg_bin, '-qt', '3', '-v', '-q', str(quality), '-R', '2',
+            cmd = [jpg_bin, '-qt', '3', '-h', '-q', str(quality), '-R', '2',
                    '-s', subsampling, image_src, image_out]
-        if int(depth) == 12:
-            cmd = [jpg_bin, '-h', '-qt', '3', '-v', '-q', str(quality), '-R', '4',
+        if int(depth) == 12 or int(depth) == 16:
+            cmd = [jpg_bin, '-h', '-qt', '3', '-q', str(quality), '-R', '4',
                    '-s', subsampling, image_src, image_out]
     elif int(depth) > 8 and pix_fmt == 'yuv420p':
         if int(depth) == 10:
             cmd = [jpg_bin, '-h', '-qt', '3', '-v', '-c', '-q', str(quality), '-R', '2',
                    '-s', subsampling, image_src, image_out]
-        if int(depth) == 12:
+        if int(depth) == 12 or int(depth) == 16:
             cmd = [jpg_bin, '-h', '-qt', '3', '-v', '-c', '-q', str(quality), '-R', '4',
                    '-s', subsampling, image_src, image_out]
     elif int(depth) == 8 and pix_fmt == 'ppm':

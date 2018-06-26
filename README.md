@@ -9,7 +9,7 @@ image_out  = sys.argv[2]
 bpp_target = sys.argv[3]
 width      = sys.argv[4]
 height     = sys.argv[5]
-pix_fmt    = sys.argv[6] #either yuv420p or ppm
+pix_fmt    = sys.argv[6] 
 depth      = sys.argv[7] 
 ```
 
@@ -19,15 +19,20 @@ image_src  = sys.argv[1]
 image_out  = sys.argv[2]
 width      = sys.argv[3]
 height     = sys.argv[4]
-pix_fmt    = sys.argv[5] #either yuv420p or ppm 
+pix_fmt    = sys.argv[5] 
+depth      = sys.argv[6]
 ```
 
 #### Source images:
 Place your source images in `./images_classes/class<X>_<bitdepth>bit/` for classes A and B,
 Example: `./images_classes/classA_8bit/`.
 
+Place your source images in `./images_classes/classA_10bitYUV/` for 10-bit class A images in .yuv format
+
 Place your source images in `./images_classes/class<X>/` for classes C, D and E.
 Example: `./images_classes/classC/`.
+
+Place your source images in `./images_classes/classE_exr/` for class E images in .exr format
 
 #### To add another codec:
 Update the `Dockerfile` to include your binaries.
@@ -46,22 +51,17 @@ Example: `./compare.py images_classes/classA_8bit/`
 #### Notes from PINAR:
 If you want to exclude a codec, remove the <codecname>.py file from both `./encode` and `./decode` folders.
 
-If you remove hevc.py from both folders, then you can use compare_pinar_hevc.py for *HEVC encoding & decoding only*.
+If you are going to encode and decode images with bit depth greater than 8bpp, after building the container you have to enable RExt__HIGH_BIT_DEPTH_SUPPORT. Here's how:
 
-For this, after removing the encoding and decoding files, place them into new folders called `./encode_hevc`, `./decode_hevc` respectively. Also create new directories `./output_hevc` and `./metrics_hevc`.
+After you build and run the container, type the following commands:
 
-Then use the command line: 
-`./compare_pinar_hevc.py <path to image>`
-Example: `./compare_pinar_hevc.py images_classes/classA_8bit/bike3.ppm`
+apt-get update
+apt-get install vim
+vi /tools/HM-16.18+SCM-8.7/source/Lib/TLibCommon/TypeDef.h
 
-If you want to use HEVC for an entire class of images (a folder), you can use the `hevc_commands.py`:
-Example: `hevc_commands.py images_classes/classC` will generate a text file called `classC_commands.txt`.
+In line 132 you have #define RExt__HIGH_BIT_DEPTH_SUPPORT set to 0. You need to change this to 1, save and quit (press i to switch to insert mode, when you finish changes press ESC to exit insert mode, then type :wq and hit ENTER. Then build HM again.
 
-You can parallelilze each line of command in this text file as such:
-`parallel -k -j <number of cores you have> < classC_commands.txt`
-
-If you don't have parallel, install it first:
-`apt-get install parallel`
+Now you won't have problems.
 
 And that's all :) 
 

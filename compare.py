@@ -4,6 +4,7 @@ import os
 import sys
 import subprocess
 import json
+import argparse
 
 def mkdir_p(path):
     """ mkdir -p
@@ -23,19 +24,27 @@ def listdir_full_path(directory):
        if not os.path.isdir(f):
            yield os.path.abspath(os.path.join(directory, f))
 
-def get_dimensions(image):
+def get_dimensions(image, classname):
     """ given a source image, return dimensions
     """
-    try:
-        dimension_cmd = ["identify", '-format', '%w,%h,%z', image]
-        width, height, depth = subprocess.check_output(dimension_cmd).split(",")
-    except subprocess.CalledProcessError as e:
-        print dimension_cmd, e.output
+    if classname.find("classA_10bitYUV") or classname == "classE":
+        size = os.path.basename(image).split('_')[2]
+        try:
+            dimension_cmd = ["identify", '-size', size, '-format', '%w,%h,%z', image]
+            width, height, depth = subprocess.check_output(dimension_cmd).split(",")
+        except subprocess.CalledProcessError as e:
+            print dimension_cmd, e.output
+    else:
+        try:
+            dimension_cmd = ["identify", '-format', '%w,%h,%z', image]
+            width, height, depth = subprocess.check_output(dimension_cmd).split(",")
+        except subprocess.CalledProcessError as e:
+            print dimension_cmd, e.output
     return width, height, depth
 
 def encode(encoder, bpp_target, image, width, height, pix_fmt, depth):
     """ given a encoding script and a test image:
-        encode image for each bpp target and place it in the ./output directory 
+        encode image for each bpp target and place it in the ./output directory
     """
     encoder_name = os.path.splitext(encoder)[0]
     output_dir = os.path.join('./output/' + encoder_name)
@@ -77,11 +86,18 @@ def decode(decoder, encoded_image, width, height, pix_fmt, depth):
         ext_name = '.ppm'
     elif pix_fmt == "yuv420p":
         ext_name = '.yuv'
+    elif pix_fmt == "pfm":
+        ext_name = '.pfm'
+    elif pix_fmt == 'pgm':
+        ext_name = '.pgm'
+    elif pix_fmt == 'tif':
+        ext_name = '.tif'
+    print(ext_name)
     decoded_image = os.path.join(output_dir, os.path.basename(encoded_image) + ext_name)
     if os.path.isfile(decoded_image):
         print "\033[92m[DECODE OK]\033[0m " + decoded_image
         return decoded_image
-    cmd = [decode_script, encoded_image, decoded_image, width, height, pix_fmt]
+    cmd = [decode_script, encoded_image, decoded_image, width, height, pix_fmt, depth]
     try:
         print "\033[92m[DECODING]\033[0m " + " ".join(cmd)
         subprocess.check_output(" ".join(cmd), stderr=subprocess.STDOUT, shell=True)
@@ -154,6 +170,7 @@ def compute_metrics(ref_image, dist_image, encoded_image, bpp_target, codec, wid
     """ given a pair of reference and distorted images:
         call vmaf and psnr functions, dump results to a json file.
     """
+
     if depth == '8':
         vmaf = compute_vmaf(ref_image, dist_image, width, height, pix_fmt)
         psnr = compute_psnr(ref_image, dist_image, width, height)
@@ -163,45 +180,52 @@ def compute_metrics(ref_image, dist_image, encoded_image, bpp_target, codec, wid
     else:
         return None
 
-def create_derivatives(image, classpath):
+def create_derivatives(image, classname):
     """ given a test image, create ppm and yuv derivatives
     """
     name = os.path.basename(image).split(".")[0]
     derivative_images = []
+    if classname == "classE_exr":
+        ppm_dir = os.path.join('derivative_images', 'pfm')
+        ppm_dest = os.path.join(pfm_dir, name + '.pfm')
+    else:
+        ppm_dir = os.path.join('derivative_images', 'ppm')
+        ppm_dest = os.path.join(ppm_dir, name + '.ppm')
 
-    ppm_dir = os.path.join('derivative_images', 'ppm')
-    ppm_dest = os.path.join(ppm_dir, name + '.ppm')
-
-    width, height, depth = get_dimensions(image)
+    width, height, depth = get_dimensions(image, classname)
     if int(width) % 2:
-        widthint = int(width) - 1
-        width = str(widthint)
+        width = str(int(width) - 1)
     if int(height) % 2:
-        heightint = int(height) - 1
-        height = str(heightint)
+        height = str(int(height) - 1)
     if int(depth)>8 and int(depth)<32:
         diffdepth = '16'
     else:
         diffdepth = depth
-    if not os.path.isfile(ppm_dest):
-        try:
-            print "\033[92m[PPM]\033[0m " + ppm_dest
-            mkdir_p(ppm_dir)
-            # cmd = ["ffmpeg", "-i", os.path.join('images', image), ppm_dest]
-            cropwidth = str(int(width) - 1)
-            cropheight = str(int(height) - 1)
-            cmd = ["/tools/difftest_ng-master/difftest_ng", "--crop", "0", "0", cropwidth, cropheight,
-                   "--convert", ppm_dest, os.path.join('images', image), "-"]
-            subprocess.check_output(" ".join(cmd), stderr=subprocess.STDOUT, shell=True)
-        except subprocess.CalledProcessError as e:
-            print cmd, e.output
-            raise e
-    else:
-        print "\033[92m[PPM OK]\033[0m " + ppm_dest
-    derivative_images.append((ppm_dest, 'ppm'))
 
-    classname = classpath.split('/')[1]
-    if classname[:6] != 'classB':
+    if not classname == "classE":
+        if not os.path.isfile(ppm_dest):
+            try:
+                print "\033[92m[PPM]\033[0m " + ppm_dest
+                mkdir_p(ppm_dir)
+                # cmd = ["ffmpeg", "-i", os.path.join('images', image), ppm_dest]
+                cropwidth = str(int(width) - 1)
+                cropheight = str(int(height) - 1)
+                cmd = ["/tools/difftest_ng-master/difftest_ng", "--crop", "0", "0", cropwidth, cropheight,
+                       "--convert", ppm_dest, os.path.join('images', image), "-"]
+                subprocess.check_output(" ".join(cmd), stderr=subprocess.STDOUT, shell=True)
+            except subprocess.CalledProcessError as e:
+                print cmd, e.output
+                raise e
+        else:
+            print "\033[92m[PPM OK]\033[0m " + ppm_dest
+        if classname == "classE_exr":
+            derivative_images.append((ppm_dest, 'pfm'))
+        else:
+            derivative_images.append((ppm_dest, 'ppm'))
+
+    if classname.find("classB"):
+        return derivative_images
+    else:
         for subsampling in ['yuv420p']:
             yuv_dir = os.path.join('derivative_images', subsampling)
             yuv_dest = os.path.join(yuv_dir, name + '.yuv')
@@ -209,20 +233,15 @@ def create_derivatives(image, classpath):
                 try:
                     print "\033[92m[YUV]\033[0m " + yuv_dest
                     mkdir_p(yuv_dir)
-                    # cmd = ["ffmpeg", "-i", os.path.join('images', image), '-pix_fmt', subsampling, yuv_dest]
                     yuv_output = '%s@%sx%sx3:[%s=0]:[%s=1]/2x2:[%s=2]/2x2' % \
                                  (yuv_dest, width, height, diffdepth, diffdepth, diffdepth)
-                    if depth == '32':
-                        cmd = ["/tools/difftest_ng-master/difftest_ng", "--crop", "0", "0", width, height,
-                               "--toycbcr", "--csub 2 2", "--halflog",
-                               yuv_output, os.path.join('images', image), '-']
-                    else:
-                        cropwidth = str(int(width) - 1)
-                        cropheight = str(int(height) - 1)
-                        # cmd = ["ffmpeg", "-i", os.path.join('images', image), subsampling, yuv_dest]
-                        cmd = ["/tools/difftest_ng-master/difftest_ng", "--crop", "0", "0", cropwidth, cropheight,
-                               "--toycbcr", "--csub 2 2",
-                               "--convert", yuv_output, os.path.join('images', image), '-']
+
+                    cropwidth = str(int(width) - 1)
+                    cropheight = str(int(height) - 1)
+                    # cmd = ["ffmpeg", "-i", os.path.join('images', image), subsampling, yuv_dest]
+                    cmd = ["/tools/difftest_ng-master/difftest_ng", "--crop", "0", "0", cropwidth, cropheight,
+                        "--toycbcr", "--csub 2 2",
+                        "--convert", yuv_output, os.path.join('images', image), '-']
                     subprocess.check_output(" ".join(cmd), stderr=subprocess.STDOUT, shell=True)
                 except subprocess.CalledProcessError as e:
                     print cmd, e.output
@@ -232,7 +251,6 @@ def create_derivatives(image, classpath):
             derivative_images.append((yuv_dest, subsampling))
 
     return derivative_images
-
 
 def main():
     """ check for Docker, check for complementary encoding and decoding scripts, check for test images.
@@ -260,6 +278,8 @@ def main():
     args = parser.parse_args()
     classpath = args.path
     classname = classpath.split('/')[1]
+    if classname == "classB_12bit":
+        classname = "classA_10bit"
 
     images = set(listdir_full_path(classpath))
     if len(images) <= 0:
@@ -282,13 +302,19 @@ def main():
     bpp_targets = set([0.06, 0.12, 0.25, 0.50, 0.75, 1.00, 1.50, 2.00])
 
     for image in images:
-        width, height, depth = get_dimensions(image)
+        width, height, depth = get_dimensions(image, classname)
         if int(width) % 2:
             width = str(int(width) - 1)
         if int(height) % 2:
             height = str(int(height) - 1)
-        derivative_images = create_derivatives(image, classpath)
-        name = os.path.basename(image).split(".")[0]
+        imgfmt = os.path.splitext(image)[1]
+        if classname.find("classA_10bitYUV"):
+            derivative_image = image
+            pix_fmt = 'yuv420p'
+        else:
+            derivative_images = create_derivatives(image, classname)
+            name, imgfmt = os.path.splitext(image)
+            # name = os.path.basename(image).split(".")[0]
         for derivative_image, pix_fmt in derivative_images:
             json_dir = 'metrics'
             json_file = os.path.join(json_dir, os.path.splitext(os.path.basename(derivative_image))[0] + "." + pix_fmt + ".json")
@@ -299,9 +325,14 @@ def main():
             derivative_image_metrics = dict()
             for codec in encoders | decoders:
                 codecname = os.path.splitext(codec)[0]
-                if codecname == 'jpeg' and classname == 'classE':
+                if codecname == "hevc" and classname == "classE_exr" and pix_fmt == "pfm":
+                    continue
+                if (codecname == 'jpeg' or codecname == 'kakadu') and classname == 'classE':
                     derivative_image = image
                     pix_fmt = 'pfm'
+                if codecname == 'kakadu' and classname[:6] == 'classB':
+                    derivative_image = image
+                    pix_fmt = imgfmt[1:]
                 bpp_target_metrics = dict()
                 for bpp_target in bpp_targets:
                     encoded_image = encode(codec, bpp_target, derivative_image, width, height, pix_fmt, depth)
@@ -309,7 +340,7 @@ def main():
                         continue
                     decoded_image = decode(codec, encoded_image, width, height, pix_fmt, depth)
                     metrics = compute_metrics(derivative_image, decoded_image, encoded_image, bpp_target, codec, width, height, pix_fmt, depth)
-                    measured_bpp = (os.path.getsize(encoded_image) * 8) / (float((int(width) * int(height))))
+                    measured_bpp = (os.path.getsize(encoded_image) * int(depth)) / (float((int(width) * int(height))))
                     bpp_target_metrics[measured_bpp] = metrics
                 derivative_image_metrics[os.path.splitext(codec)[0]] = bpp_target_metrics
             main_dict[derivative_image] = derivative_image_metrics

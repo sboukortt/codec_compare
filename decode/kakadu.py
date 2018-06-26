@@ -11,7 +11,7 @@ width   = sys.argv[3]
 height  = sys.argv[4]
 pix_fmt = sys.argv[5]
 
-if pix_fmt == "ppm":
+if pix_fmt == "ppm" or pix_fmt == 'pgm' or pix_fmt == 'tif' or pix_fmt == 'pfm':
     kakadu_bin = '/tools/kakadu/KDU7A2_Demo_Apps_for_Ubuntu-x86-64_170827/kdu_expand'
 if pix_fmt == "yuv420p":
     in_tmp = '/tmp/kakadu.mj2'
