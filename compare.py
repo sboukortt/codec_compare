@@ -200,7 +200,7 @@ def create_derivatives(image, classname):
     derivative_images = []
     if classname == "classE_exr":
         ppm_dir = os.path.join('derivative_images', 'pfm')
-        ppm_dest = os.path.join(pfm_dir, name + '.pfm')
+        ppm_dest = os.path.join(ppm_dir, name + '.pfm')
     else:
         ppm_dir = os.path.join('derivative_images', 'ppm')
         ppm_dest = os.path.join(ppm_dir, name + '.ppm')
@@ -291,8 +291,6 @@ def main():
     args = parser.parse_args()
     classpath = args.path
     classname = classpath.split('/')[1]
-    if classname == "classB_12bit":
-        classname = "classA_10bit"
 
     images = set(listdir_full_path(classpath))
     if len(images) <= 0:
@@ -337,23 +335,41 @@ def main():
             derivative_image_metrics = dict()
             for codec in encoders | decoders:
                 codecname = os.path.splitext(codec)[0]
+                #if codecname == "hevc":
+                    #continue
+                convertflag = 1
+                caseflag = pix_fmt
                 if codecname == "hevc" and classname == "classE_exr" and pix_fmt == "pfm":
                     continue
                 if (codecname == 'jpeg' or codecname == 'kakadu') and classname == 'classE':
-                    derivative_image = image
-                    pix_fmt = 'pfm'
+                    convertflag = 0
+                    caseflag = 'pfm'
+                    # derivative_image = image
+                    # pix_fmt = 'pfm'
                 if codecname == 'kakadu' and classname[:6] == 'classB':
-                    derivative_image = image
-                    pix_fmt = imgfmt[1:]
+                    convertflag = 0
+                    caseflag = imgfmt[1:]
+                    # derivative_image = image
+                    # pix_fmt = imgfmt[1:]
                 bpp_target_metrics = dict()
                 for bpp_target in bpp_targets:
-                    encoded_image = encode(codec, bpp_target, derivative_image, width, height, pix_fmt, depth)
-                    if encoded_image is None:
-                        continue
-                    decoded_image = decode(codec, encoded_image, width, height, pix_fmt, depth)
-                    metrics = compute_metrics(derivative_image, decoded_image, encoded_image, bpp_target, codec, width, height, pix_fmt, depth)
-                    measured_bpp = (os.path.getsize(encoded_image) * int(depth)) / (float((int(width) * int(height))))
-                    bpp_target_metrics[measured_bpp] = metrics
+                    if convertflag:
+                        encoded_image = encode(codec, bpp_target, derivative_image, width, height, pix_fmt, depth)
+                        if encoded_image is None:
+                            continue
+                        decoded_image = decode(codec, encoded_image, width, height, pix_fmt, depth)
+                        metrics = compute_metrics(derivative_image, decoded_image, encoded_image, bpp_target, codec, width, height, pix_fmt, depth)
+                        measured_bpp = (os.path.getsize(encoded_image) * int(depth)) / (float((int(width) * int(height))))
+                        bpp_target_metrics[measured_bpp] = metrics
+                    else:
+                        encoded_image = encode(codec, bpp_target, image, width, height, caseflag, depth)
+                        if encoded_image is None:
+                            continue
+                        decoded_image = decode(codec, encoded_image, width, height, caseflag, depth)
+                        metrics = compute_metrics(image, decoded_image, encoded_image, bpp_target, codec, width, height, imgfmt[1:], depth)
+                        measured_bpp = (os.path.getsize(encoded_image) * int(depth)) / (float((int(width) * int(height))))
+                        bpp_target_metrics[measured_bpp] = metrics
+
                 derivative_image_metrics[os.path.splitext(codec)[0]] = bpp_target_metrics
             main_dict[derivative_image] = derivative_image_metrics
 
