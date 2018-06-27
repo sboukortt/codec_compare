@@ -26,8 +26,7 @@ depth      = sys.argv[6]
 #### Source images:
 Place your source images in `./images_classes/class<X>_<bitdepth>bit/` for classes A and B,
 Example: `./images_classes/classA_8bit/`.
-
-Place your source images in `./images_classes/classA_10bitYUV/` for 10-bit class A images in .yuv format
+Note: .yuv files in class A 10 bit cannot be handled in this version!
 
 Place your source images in `./images_classes/class<X>/` for classes C, D and E.
 Example: `./images_classes/classC/`.
