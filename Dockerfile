@@ -39,13 +39,12 @@ RUN mkdir -p /tools && \
     patchelf --set-rpath '$ORIGIN/' /tools/kakadu/KDU7A2_Demo_Apps_for_Ubuntu-x86-64_170827/kdu_v_expand
 
 # WEBP
+RUN apt-get update && apt-get install -y libglu1 libxi6
 RUN mkdir -p /tools && \
     cd /tools && \
     wget -O libwebp.tar.gz https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.0.0-linux-x86-64.tar.gz  && \
     tar xvzf libwebp.tar.gz && \
     rm -f libwebp.tar.gz
-RUN apt-get install libglu1 -y
-RUN apt-get install libxi6 -y
 
 # HEVC
 RUN mkdir -p /tools && \
