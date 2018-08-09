@@ -24,14 +24,11 @@ depth      = sys.argv[6]
 ```
 
 #### Source images:
-Place your source images in `./images_classes/class<X>_<bitdepth>bit/` for classes A and B,
-Example: `./images_classes/classA_8bit/`.
-Note: .yuv files in class A 10 bit cannot be handled in this version!
+Place your source images in `./images/class<X>_<bitdepth>bit/` for classes A and B,
+Example: `./images/classA_8bit/`.
 
-Place your source images in `./images_classes/class<X>/` for classes C, D and E.
-Example: `./images_classes/classC/`.
-
-Place your source images in `./images_classes/classE_exr/` for class E images in .exr format
+Place your source images in `./images/class<X>/` for classes C, D and E.
+Example: `./images/classC/`.
 
 #### To add another codec:
 Update the `Dockerfile` to include your binaries.
@@ -45,7 +42,7 @@ Add an encode and decode script in `./encode` and `./decode`.
 
 #### To encode, decode, calculate metrics:
 `./compare.py <path to images folder>/`
-Example: `./compare.py images_classes/classA_8bit/`
+Example: `./compare.py images/classA_8bit/`
 
 #### Notes from PINAR:
 If you want to exclude a codec, remove the <codecname>.py file from both `./encode` and `./decode` folders.
