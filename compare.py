@@ -105,7 +105,8 @@ def decode(decoder, encoded_image, width, height, pix_fmt, depth):
         ext_name = '.pgm'
     elif pix_fmt == 'tif':
         ext_name = '.tif'
-    print(ext_name)
+    if 'webp' in decoder and ext_name == '.yuv':
+        ext_name = '.ppm'
     decoded_image = os.path.join(output_dir, os.path.basename(encoded_image) + ext_name)
     if os.path.isfile(decoded_image):
         print "\033[92m[DECODE OK]\033[0m " + decoded_image
@@ -175,93 +176,324 @@ def compute_psnr(ref_image, dist_image, width, height):
     psnr_log = open(log_path).read()
     for stat in psnr_log.rstrip().split(" "):
         key, value = stat.split(":")
-        if key is not "n":
+        if key is not "n" and not 'mse' in key:
             psnr_dict[key] = float(value)
     return psnr_dict
 
-def compute_metrics(ref_image, dist_image, encoded_image, bpp_target, codec, width, height, pix_fmt, depth):
+def compute_metrics(ref_image, dist_image, encoded_image, bpp_target, codec, width, height, pix_fmt):
+    """ given a pair of reference and distorted images:
+        call vmaf and psnr functions, dump results to a json file.
+        """
+    
+    vmaf = compute_vmaf(ref_image, dist_image, width, height, pix_fmt)
+    psnr = compute_psnr(ref_image, dist_image, width, height)
+    stats = vmaf.copy()
+    stats.update(psnr)
+    return stats
+
+def compute_metrics_SDR(ref_image, dist_image, encoded_image, bpp_target, codec, width, height, pix_fmt, depth):
     """ given a pair of reference and distorted images:
         call vmaf and psnr functions, dump results to a json file.
     """
+    refname, ref_pix_fmt = os.path.basename(ref_image).split(".")
+    dist_pix_fmt = os.path.basename(dist_image).split(".")[-1]
+    
+    if 'classE' in ref_image:
+        primary = '1'
+    else:
+        primary = '0'
+
+    logfile = '/tmp/stats.log'
+
+    HDRConvert_dir = '/tools/HDRTools-0.18-dev/bin/HDRConvert'
+    ppm_to_yuv_cfg = 'convert_configs/HDRConvertPPMToYCbCr444fr.cfg'
+
+
+    if 'yuv' in pix_fmt and not 'jpeg' in dist_image:
+        chroma_fmt = 1
+    else:
+        chroma_fmt = 3
+
+    if 'HOTEL' in refname:
+        chroma_fmt = 0
+    
+    HDRMetrics_dir = '/tools/HDRTools-0.18-dev/bin/HDRMetrics'
+    HDRMetrics_config =  'convert_configs/HDRMetrics.cfg'
+
+    try:
+        cmd = [HDRMetrics_dir, '-f', HDRMetrics_config, '-p', 'Input0File=%s' % ref_image, '-p',
+               'Input0Width=%s' % width,
+               '-p', 'Input0Height=%s' % height, '-p', 'Input0ChromaFormat=%d' % chroma_fmt, '-p',
+               'Input0BitDepthCmp0=%s'
+               % depth, '-p', 'Input0BitDepthCmp1=%s' % depth, '-p', 'Input0BitDepthCmp2=%s' % depth, '-p',
+               'Input1File=%s' % dist_image, '-p', 'Input1Width=%s' % width, '-p', 'Input1Height=%s' % height, '-p',
+               'Input1ChromaFormat=%d' % chroma_fmt, '-p', 'Input1BitDepthCmp0=%s' % depth, '-p',
+               'Input1BitDepthCmp1=%s' % depth, '-p', 'Input1BitDepthCmp2=%s' % depth, '-p', 'LogFile=%s' % logfile,
+               '-p', 'TFPSNRDistortion=0', '-p', 'EnablePSNR=1', '-p', 'EnableSSIM=1', '-p', 'EnableMSSSIM=1',
+               '>', '/tmp/statsHDRTools.json']
+        subprocess.check_output(' '.join(cmd), stderr=subprocess.STDOUT, shell=True)
+    except subprocess.CalledProcessError as e:
+        print cmd, e.output
+        raise e
+
+    objective_dict = dict()
+    with open('/tmp/statsHDRTools.json', 'r') as f:
+        for line in f:
+            if '000000' in line:
+                metriclist = line.split()
+                objective_dict["psnr-y"]   = metriclist[1]
+                if 'classB' not in ref_image:
+                    objective_dict["psnr-avg"] = (6*float(metriclist[1])+float(metriclist[2])+float(metriclist[3]))/8.0
+                objective_dict["ms_ssim"]  = metriclist[4]
+                objective_dict["ssim"]     = metriclist[7]
 
     if depth == '8':
-        vmaf = compute_vmaf(ref_image, dist_image, width, height, pix_fmt)
-        psnr = compute_psnr(ref_image, dist_image, width, height)
-        stats = vmaf.copy()
-        stats.update(psnr)
-        return stats
+        log_path = '/tmp/stats.json'
+        cmd = ['ffmpeg', '-s:v', '%s,%s' % (width, height), '-i', dist_image,
+               '-s:v', '%s,%s' % (width, height), '-i', ref_image,
+               '-lavfi', 'libvmaf=log_fmt=json:log_path=' + log_path,
+               '-f', 'null', '-'
+               ]
+        try:
+            print "\033[92m[VMAF]\033[0m " + dist_image
+            subprocess.check_output(" ".join(cmd), stderr=subprocess.STDOUT, shell=True)
+        except subprocess.CalledProcessError as e:
+            print "\033[91m[ERROR]\033[0m " + " ".join(cmd) + "\n" + e.output
+
+        vmaf_log = json.load(open(log_path))
+
+        vmaf_dict = dict()
+        vmaf_dict["vmaf"] = vmaf_log["frames"][0]["metrics"]["vmaf"]
+        vmaf_dict["vif"]  = vmaf_log["frames"][0]["metrics"]["vif_scale0"]
+        stats = vmaf_dict.copy()
+        stats.update(objective_dict)
+
     else:
-        return None
+        stats = objective_dict
+
+    return stats
+
+def compute_metrics_HDR(ref_image, dist_image, encoded_image, bpp_target, codec, width, height, pix_fmt, depth):
+    """ given a pair of reference and distorted images:
+        call vmaf and psnr functions, dump results to a json file.
+    """
+    ref_pix_fmt = os.path.basename(ref_image).split(".")[-1]
+    dist_pix_fmt = os.path.basename(dist_image).split(".")[-1]
+    HDRConvert_dir = '/tools/HDRTools-0.18-dev/bin/HDRConvert'
+    ppm_to_exr_cfg = 'convert_configs/HDRConvertPPMToEXR.cfg'
+    yuv_to_exr_cfg = 'convert_configs/HDRConvertYCbCrToBT2020EXR.cfg'
+
+    logfile = '/tmp/stats.log'
+
+    primary = '0'
+
+    if dist_pix_fmt == 'ppm':
+        exr_dir = os.path.join('objective_images', 'PPM_EXR')
+        exr_dest = os.path.join(exr_dir, os.path.basename(dist_image) + '.exr')
+        if not os.path.isfile(exr_dest):
+            print "\033[92m[EXR]\033[0m " + exr_dest
+            mkdir_p(exr_dir)
+            try:
+                cmd = [HDRConvert_dir, '-f', ppm_to_exr_cfg, '-p', 'SourceFile=%s' % dist_image,
+                       '-p',
+                       'SourceWidth=%s' % width,
+                       '-p', 'SourceHeight=%s' % height, '-p', 'SourceBitDepthCmp0=%s' % depth, '-p',
+                       'SourceBitDepthCmp1=%s'
+                       % depth, '-p', 'SourceBitDepthCmp2=%s' % depth, '-p', 'SourceColorPrimaries=%s' % primary, '-p',
+                       'OutputFile=%s' % exr_dest, '-p', 'OutputWidth=%s' % width, '-p', 'OutputHeight=%s' % height,
+                       '-p',
+                       'OutputBitDepthCmp0=%s' % depth, '-p', 'OutputBitDepthCmp1=%s' % depth, '-p',
+                       'OutputBitDepthCmp2=%s'
+                       % depth, '-p', 'OutputColorPrimaries=%s' % primary]
+                subprocess.check_output(' '.join(cmd), stderr=subprocess.STDOUT, shell=True)
+            except subprocess.CalledProcessError as e:
+                print cmd, e.output
+                raise e
+        else:
+            print "\033[92m[EXR OK]\033[0m " + exr_dest
+
+        dist_image = exr_dest
+        chroma_fmt = 3
+
+    if ref_pix_fmt == 'ppm':
+        exr_dir = os.path.join('objective_images', 'PPM_EXR')
+        exr_dest = os.path.join(exr_dir, os.path.basename(ref_image) + '.exr')
+        if not os.path.isfile(exr_dest):
+            print "\033[92m[EXR]\033[0m " + exr_dest
+            mkdir_p(exr_dir)
+            try:
+                cmd = [HDRConvert_dir, '-f', ppm_to_exr_cfg, '-p', 'SourceFile=%s' % ref_image,
+                       '-p',
+                       'SourceWidth=%s' % width,
+                       '-p', 'SourceHeight=%s' % height, '-p', 'SourceBitDepthCmp0=%s' % depth, '-p',
+                       'SourceBitDepthCmp1=%s'
+                       % depth, '-p', 'SourceBitDepthCmp2=%s' % depth, '-p', 'SourceColorPrimaries=%s' % primary, '-p',
+                       'OutputFile=%s' % exr_dest, '-p', 'OutputWidth=%s' % width, '-p', 'OutputHeight=%s' % height,
+                       '-p',
+                       'OutputBitDepthCmp0=%s' % depth, '-p', 'OutputBitDepthCmp1=%s' % depth, '-p',
+                       'OutputBitDepthCmp2=%s'
+                       % depth, '-p', 'OutputColorPrimaries=%s' % primary]
+                subprocess.check_output(' '.join(cmd), stderr=subprocess.STDOUT, shell=True)
+            except subprocess.CalledProcessError as e:
+                print cmd, e.output
+                raise e
+        else:
+            print "\033[92m[EXR OK]\033[0m " + exr_dest
+        
+        ref_image = exr_dest
+        chroma_fmt = 3
+
+    if dist_pix_fmt == 'yuv':
+        exr_dir = os.path.join('objective_images', 'YUV_EXR')
+        exr_dest = os.path.join(exr_dir, os.path.basename(dist_image) + '.exr')
+        if not os.path.isfile(exr_dest):
+            print "\033[92m[EXR]\033[0m " + exr_dest
+            mkdir_p(exr_dir)
+            try:
+                cmd = [HDRConvert_dir, '-f', yuv_to_exr_cfg, '-p', 'SourceFile=%s' % dist_image,
+                       '-p',
+                       'SourceWidth=%s' % width,
+                       '-p', 'SourceHeight=%s' % height, '-p', 'SourceBitDepthCmp0=%s' % depth, '-p',
+                       'SourceBitDepthCmp1=%s'
+                       % depth, '-p', 'SourceBitDepthCmp2=%s' % depth, '-p', 'SourceColorPrimaries=%s' % primary, '-p',
+                       'OutputFile=%s' % exr_dest, '-p', 'OutputWidth=%s' % width, '-p', 'OutputHeight=%s' % height,
+                       '-p',
+                       'OutputBitDepthCmp0=%s' % depth, '-p', 'OutputBitDepthCmp1=%s' % depth, '-p',
+                       'OutputBitDepthCmp2=%s'
+                       % depth, '-p', 'OutputColorPrimaries=%s' % primary]
+                subprocess.check_output(' '.join(cmd), stderr=subprocess.STDOUT, shell=True)
+            except subprocess.CalledProcessError as e:
+                print cmd, e.output
+                raise e
+        else:
+            print "\033[92m[EXR OK]\033[0m " + exr_dest
+
+        dist_image = exr_dest
+        chroma_fmt = 3
+
+    if dist_pix_fmt == 'yuv':
+        exr_dir = os.path.join('objective_images', 'YUV_EXR')
+        exr_dest = os.path.join(exr_dir, os.path.basename(ref_image) + '.exr')
+        if not os.path.isfile(exr_dest):
+            print "\033[92m[EXR]\033[0m " + exr_dest
+            mkdir_p(exr_dir)
+            try:
+                cmd = [HDRConvert_dir, '-f', yuv_to_exr_cfg, '-p', 'SourceFile=%s' % ref_image,
+                       '-p',
+                       'SourceWidth=%s' % width,
+                       '-p', 'SourceHeight=%s' % height, '-p', 'SourceBitDepthCmp0=%s' % depth, '-p',
+                       'SourceBitDepthCmp1=%s'
+                       % depth, '-p', 'SourceBitDepthCmp2=%s' % depth, '-p', 'SourceColorPrimaries=%s' % primary, '-p',
+                       'OutputFile=%s' % exr_dest, '-p', 'OutputWidth=%s' % width, '-p', 'OutputHeight=%s' % height,
+                       '-p',
+                       'OutputBitDepthCmp0=%s' % depth, '-p', 'OutputBitDepthCmp1=%s' % depth, '-p',
+                       'OutputBitDepthCmp2=%s'
+                       % depth, '-p', 'OutputColorPrimaries=%s' % primary]
+                subprocess.check_output(' '.join(cmd), stderr=subprocess.STDOUT, shell=True)
+            except subprocess.CalledProcessError as e:
+                print cmd, e.output
+                raise e
+        else:
+            print "\033[92m[EXR OK]\033[0m " + exr_dest
+        
+        ref_image = exr_dest
+        chroma_fmt = 3
+
+    HDRMetrics_dir = '/tools/HDRTools-0.18-dev/bin/HDRMetrics'
+    HDRMetrics_config = HDRMetrics_dir + '/HDRMetrics_config'
+
+    try:
+        cmd = [HDRMetrics_dir, '-f', HDRMetrics_config, '-p', 'Input0File=%s' % ref_image, '-p',
+               'Input0Width=%s' % width,
+               '-p', 'Input0Height=%s' % height, '-p', 'Input0ChromaFormat=%d' % chroma_fmt, '-p', 'Input0ColorSpace=1', '-p',
+               'Input0BitDepthCmp0=%s'
+               % depth, '-p', 'Input0BitDepthCmp1=%s' % depth, '-p', 'Input0BitDepthCmp2=%s' % depth, '-p', 'Input1ColorSpace=1', '-p',
+               'Input1File=%s' % dist_image, '-p', 'Input1Width=%s' % width, '-p', 'Input1Height=%s' % height, '-p',
+               'Input1ChromaFormat=%d' % chroma_fmt, '-p', 'Input1BitDepthCmp0=%s' % depth, '-p',
+               'Input1BitDepthCmp1=%s' % depth, '-p', 'Input1BitDepthCmp2=%s' % depth, '-p', 'LogFile=%s' % logfile,
+               '-p', 'TFPSNRDistortion=1', '-p', 'EnableTFPSNR=1', '-p', 'EnableTFMSSSIM=1',
+               '>', '/tmp/statsHDRTools.json']
+        subprocess.check_output(' '.join(cmd), stderr=subprocess.STDOUT, shell=True)
+    except subprocess.CalledProcessError as e:
+        print cmd, e.output
+        raise e
+
+    objective_dict = dict()
+    with open('/tmp/statsHDRTools.json', 'r') as f:
+        for line in f:
+            if '000000' in line:
+                metriclist = line.split()
+                objective_dict["psnr-y"]   = metriclist[5]
+                objective_dict["ms_ssim"]  = metriclist[9]
+
+    return objective_dict
 
 def create_derivatives(image, classname):
     """ given a test image, create ppm and yuv derivatives
     """
     name = os.path.basename(image).split(".")[0]
     derivative_images = []
-    if classname == "classE_exr":
-        ppm_dir = os.path.join('derivative_images', 'pfm')
-        ppm_dest = os.path.join(ppm_dir, name + '.pfm')
-    else:
-        ppm_dir = os.path.join('derivative_images', 'ppm')
-        ppm_dest = os.path.join(ppm_dir, name + '.ppm')
 
+    yuv_dir = os.path.join('derivative_images', 'yuv420p')
+    yuv_dest = os.path.join(yuv_dir, name + '.yuv')
+    
+    ppm_dir = os.path.join('derivative_images', 'ppm')
+    ppm_dest = os.path.join(ppm_dir, name + '.ppm')
+    
     width, height, depth = get_dimensions(image, classname)
-    if int(width) % 2:
-        width = str(int(width) - 1)
-    if int(height) % 2:
-        height = str(int(height) - 1)
-    if int(depth)>8 and int(depth)<32:
-        diffdepth = '16'
-    else:
-        diffdepth = depth
 
-    if not classname == "classE":
+    HDRTools_dir = '/tools/HDRTools-0.18-dev/bin/HDRConvert'
+    ppm_to_yuv_cfg = 'convert_configs/HDRConvertPPMToYCbCr420fr.cfg'
+
+    if classname == 'classE':
+        primary = '1'
+    else:
+        primary = '0'
+    
+    if 'classB' in classname:
         if not os.path.isfile(ppm_dest):
             try:
                 print "\033[92m[PPM]\033[0m " + ppm_dest
                 mkdir_p(ppm_dir)
-                # cmd = ["ffmpeg", "-i", os.path.join('images', image), ppm_dest]
-                cropwidth = str(int(width) - 1)
-                cropheight = str(int(height) - 1)
-                cmd = ["/tools/difftest_ng-master/difftest_ng", "--crop", "0", "0", cropwidth, cropheight,
-                       "--convert", ppm_dest, os.path.join('images', image), "-"]
+                cmd = ["/tools/difftest_ng-master/difftest_ng", "--convert", ppm_dest, os.path.join('images', image), "-"]
                 subprocess.check_output(" ".join(cmd), stderr=subprocess.STDOUT, shell=True)
             except subprocess.CalledProcessError as e:
                 print cmd, e.output
                 raise e
+                exit(1)
         else:
             print "\033[92m[PPM OK]\033[0m " + ppm_dest
-        if classname == "classE_exr":
-            derivative_images.append((ppm_dest, 'pfm'))
-        else:
-            derivative_images.append((ppm_dest, 'ppm'))
 
-    if "classB" in classname:
+        derivative_images.append((ppm_dest, 'ppm'))
         return derivative_images
+    
+    if not os.path.isfile(yuv_dest):
+        try:
+            print "\033[92m[YUV420]\033[0m " + yuv_dest
+            mkdir_p(yuv_dir)
+            cmd = [HDRTools_dir, '-f', ppm_to_yuv_cfg, '-p', 'SourceFile=%s' % image, '-p', 'SourceWidth=%s' % width,
+                   '-p', 'SourceHeight=%s' % height, '-p', 'SourceBitDepthCmp0=%s' % depth, '-p', 'SourceBitDepthCmp1=%s'
+                   % depth, '-p', 'SourceBitDepthCmp2=%s' % depth, '-p', 'SourceColorPrimaries=%s' % primary, '-p',
+                   'OutputFile=%s' % yuv_dest, '-p', 'OutputWidth=%s' % width, '-p', 'OutputHeight=%s' % height, '-p',
+                   'OutputBitDepthCmp0=%s' % depth, '-p', 'OutputBitDepthCmp1=%s' % depth, '-p', 'OutputBitDepthCmp2=%s'
+                   % depth, '-p', 'OutputColorPrimaries=%s' % primary]
+            subprocess.check_output(' '.join(cmd), stderr=subprocess.STDOUT, shell=True)
+        except subprocess.CalledProcessError as e:
+            print cmd, e.output
+            raise e
     else:
-        for subsampling in ['yuv420p']:
-            yuv_dir = os.path.join('derivative_images', subsampling)
-            yuv_dest = os.path.join(yuv_dir, name + '.yuv')
-            if not os.path.isfile(yuv_dest):
-                try:
-                    print "\033[92m[YUV]\033[0m " + yuv_dest
-                    mkdir_p(yuv_dir)
-                    yuv_output = '%s@%sx%sx3:[%s=0]:[%s=1]/2x2:[%s=2]/2x2' % \
-                                 (yuv_dest, width, height, diffdepth, diffdepth, diffdepth)
+        print "\033[92m[YUV420 OK]\033[0m " + yuv_dest
 
-                    cropwidth = str(int(width) - 1)
-                    cropheight = str(int(height) - 1)
-                    # cmd = ["ffmpeg", "-i", os.path.join('images', image), subsampling, yuv_dest]
-                    cmd = ["/tools/difftest_ng-master/difftest_ng", "--crop", "0", "0", cropwidth, cropheight,
-                        "--toycbcr", "--csub 2 2",
-                        "--convert", yuv_output, os.path.join('images', image), '-']
-                    subprocess.check_output(" ".join(cmd), stderr=subprocess.STDOUT, shell=True)
-                except subprocess.CalledProcessError as e:
-                    print cmd, e.output
-                    raise e
-            else:
-                print "\033[92m[YUV OK]\033[0m " + yuv_dest
-            derivative_images.append((yuv_dest, subsampling))
+    derivative_images.append((yuv_dest, 'yuv420p'))
+
+    if not os.path.isfile(ppm_dest):
+        try:
+            mkdir_p(ppm_dir)
+            cmd = ['cp', image, ppm_dest]
+            subprocess.check_output(' '.join(cmd), stderr=subprocess.STDOUT, shell=True)
+        except subprocess.CalledProcessError as e:
+            print cmd, e.output
+            raise e
 
     return derivative_images
 
@@ -314,17 +546,15 @@ def main():
 
     for image in images:
         width, height, depth = get_dimensions(image, classname)
-        if int(width) % 2:
-            width = str(int(width) - 1)
-        if int(height) % 2:
-            height = str(int(height) - 1)
-        imgfmt = os.path.splitext(image)[1]
-        if "classA_10bitYUV" in classname:
-            derivative_images.append((image, 'yuv420p'))
+        name, imgfmt = os.path.splitext(image)
+        imgfmt = os.path.basename(image).split(".")[-1]
+
+        if classname[:6] == 'classB':
+            derivative_images = create_derivatives(image, classname)
         else:
             derivative_images = create_derivatives(image, classname)
-            name, imgfmt = os.path.splitext(image)
-            # name = os.path.basename(image).split(".")[0]
+            derivative_images.append((image, imgfmt))
+
         for derivative_image, pix_fmt in derivative_images:
             json_dir = 'metrics'
             json_file = os.path.join(json_dir, os.path.splitext(os.path.basename(derivative_image))[0] + "." + pix_fmt + ".json")
@@ -335,40 +565,52 @@ def main():
             derivative_image_metrics = dict()
             for codec in encoders | decoders:
                 codecname = os.path.splitext(codec)[0]
-                #if codecname == "hevc":
-                    #continue
                 convertflag = 1
                 caseflag = pix_fmt
-                if codecname == "hevc" and classname == "classE_exr" and pix_fmt == "pfm":
+                if codecname == 'webp' and pix_fmt != 'yuv420p':
                     continue
-                if (codecname == 'jpeg' or codecname == 'kakadu') and classname == 'classE':
-                    convertflag = 0
-                    caseflag = 'pfm'
-                    # derivative_image = image
-                    # pix_fmt = 'pfm'
+                if codecname == 'webp' and depth != '8':
+                    continue
                 if codecname == 'kakadu' and classname[:6] == 'classB':
                     convertflag = 0
-                    caseflag = imgfmt[1:]
-                    # derivative_image = image
-                    # pix_fmt = imgfmt[1:]
+                    caseflag = imgfmt
                 bpp_target_metrics = dict()
                 for bpp_target in bpp_targets:
                     if convertflag:
                         encoded_image = encode(codec, bpp_target, derivative_image, width, height, pix_fmt, depth)
-                        if encoded_image is None:
-                            continue
-                        decoded_image = decode(codec, encoded_image, width, height, pix_fmt, depth)
-                        metrics = compute_metrics(derivative_image, decoded_image, encoded_image, bpp_target, codec, width, height, pix_fmt, depth)
-                        measured_bpp = (os.path.getsize(encoded_image) * int(depth)) / (float((int(width) * int(height))))
-                        bpp_target_metrics[measured_bpp] = metrics
                     else:
                         encoded_image = encode(codec, bpp_target, image, width, height, caseflag, depth)
-                        if encoded_image is None:
-                            continue
+                    if encoded_image is None:
+                        continue
+                    if convertflag:
+                        if 'jpeg' in codec and 'yuv' in pix_fmt:
+                            decoded_image = decode(codec, encoded_image, width, height, 'ppm', depth)
+                        else:
+                            decoded_image = decode(codec, encoded_image, width, height, pix_fmt, depth)
+                    else:
                         decoded_image = decode(codec, encoded_image, width, height, caseflag, depth)
-                        metrics = compute_metrics(image, decoded_image, encoded_image, bpp_target, codec, width, height, imgfmt[1:], depth)
-                        measured_bpp = (os.path.getsize(encoded_image) * int(depth)) / (float((int(width) * int(height))))
-                        bpp_target_metrics[measured_bpp] = metrics
+                    if 'classE' in classname:
+                        if codecname == 'jpeg':
+                            metrics = compute_metrics_HDR(image, decoded_image, encoded_image, bpp_target, codec, width, height, pix_fmt, depth)
+                        else:
+                            metrics = compute_metrics_HDR(derivative_image, decoded_image, encoded_image, bpp_target, codec, width, height, pix_fmt, depth)
+                    elif 'classB' in classname:
+                        metrics = compute_metrics(derivative_image, decoded_image, encoded_image, bpp_target, codec, width, height, pix_fmt)
+                    else:
+                        if convertflag:
+                            if codecname == 'webp':
+                                metrics = compute_metrics_SDR(image, decoded_image, encoded_image, bpp_target, codec, width, height, pix_fmt, depth)
+                            elif codecname == 'jpeg':
+                                if 'classB' in classname:
+                                    metrics = compute_metrics_SDR(derivative_image, decoded_image, encoded_image, bpp_target, codec, width, height, pix_fmt, depth)
+                                else:
+                                    metrics = compute_metrics_SDR(image, decoded_image, encoded_image, bpp_target, codec, width, height, pix_fmt, depth)
+                            else:
+                                metrics = compute_metrics_SDR(derivative_image, decoded_image, encoded_image, bpp_target, codec, width, height, pix_fmt, depth)
+                        else:
+                            metrics = compute_metrics_SDR(image, decoded_image, encoded_image, bpp_target, codec, width, height, imgfmt, depth)
+                    measured_bpp = (os.path.getsize(encoded_image) * int(depth)) / (float((int(width) * int(height))))
+                    bpp_target_metrics[measured_bpp] = metrics
 
                 derivative_image_metrics[os.path.splitext(codec)[0]] = bpp_target_metrics
             main_dict[derivative_image] = derivative_image_metrics

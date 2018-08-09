@@ -12,10 +12,6 @@ height     = sys.argv[5]
 pix_fmt    = sys.argv[6]
 depth      = sys.argv[7]
 
-# if depth != "8":
-#     print "8 bit only"
-#     sys.exit(1)
-
 jpg_bin = '/tools/jpeg/jpeg'
 
 if pix_fmt == "ppm" or pix_fmt == "yuv444p" or pix_fmt == 'pfm' or pix_fmt == 'pgm' or pix_fmt == 'tif':
@@ -29,19 +25,19 @@ elif pix_fmt == "yuv420p":
 
 qty_min, qty_max = 0, 100
 quality = qty_max / 2
-Quality = quality / 2
 step = quality / 2
 
 for i in range(0, int(math.floor(math.log(qty_max)/math.log(2)))):
     if pix_fmt == 'pfm':
-        cmd = [jpg_bin, '-q', str(quality), '-Q', str(Quality), '-qt', '3', '-h', '-profile', 'c', '-rR', '4',
-               image_src, image_out]
+        fixQual = '80'
+        cmd = [jpg_bin, '-q', str(quality), '-Q', str(quality), '-qt', '3', '-h', '-profile', 'c', '-rR', '4',
+            image_src, image_out]
     elif int(depth) > 8 and (pix_fmt == 'ppm' or pix_fmt == "yuv444p" or pix_fmt == 'pgm' or pix_fmt == 'tif'):
         if int(depth) == 10:
             cmd = [jpg_bin, '-qt', '3', '-h', '-q', str(quality), '-R', '2',
                    '-s', subsampling, image_src, image_out]
         if int(depth) == 12 or int(depth) == 16:
-            cmd = [jpg_bin, '-h', '-qt', '3', '-q', str(quality), '-R', '4',
+            cmd = [jpg_bin, '-h', '-g', '1', '-q', str(quality), '-R', '4',
                    '-s', subsampling, image_src, image_out]
     elif int(depth) > 8 and pix_fmt == 'yuv420p':
         if int(depth) == 10:
@@ -68,7 +64,6 @@ for i in range(0, int(math.floor(math.log(qty_max)/math.log(2)))):
     print quality, step, size, bpp, bpp_target
 
     quality += step * (1 if (bpp < float(bpp_target)) else -1)
-    Quality = quality / 2
     step /= 2
 
 print output

@@ -13,6 +13,8 @@ RUN apt-get update && apt-get install -y \
     yasm \
     subversion \
     python \
+    vim \
+    exuberant-ctags \
     imagemagick
 
 # JPEG
@@ -80,7 +82,15 @@ RUN mkdir -p /tools && \
     make && \
     make install
 
-
+# HDRTools 0.18-dev
+RUN mkdir -p /tools && \
+    cd /tools && \
+    wget -O HDRTools-0.18-dev.tar.gz https://gitlab.com/standards/HDRTools/-/archive/0.18-dev/HDRTools-0.18-dev.tar.gz && \
+    tar xvzf HDRTools-0.18-dev.tar.gz && \
+    rm -f HDRTools-0.18-dev.tar.gz && \
+    cd HDRTools-0.18-dev && \
+    make 		
+    
 # TO ADD ANOTHER
 # ADD /local/path/to/bin /tools/bin
 # ^ This will add the file from the host machine into the container. In this case the bin is accessible at: `/tools/bin`.
