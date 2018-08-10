@@ -20,7 +20,7 @@ elif pix_fmt == 'pfm':
     kakadu_bin = '/tools/kakadu/KDU7A2_Demo_Apps_for_Ubuntu-x86-64_170827/kdu_compress'
     cmd = [kakadu_bin, "-i", image_src, "-o", image_out, "-rate", bpp_target, "-fprec", "32F8"]
 elif pix_fmt == "yuv420p":
-    in_tmp = '/tmp/kakadu_%sx%s_420.yuv' % (width, height)
+    in_tmp = '/tmp/kakadu_%sx%s_%sb_420.yuv' % (width, height, depth)
     shutil.copyfile(image_src, in_tmp)
     out_tmp = '/tmp/kakadu.mj2'
     kakadu_bin = '/tools/kakadu/KDU7A2_Demo_Apps_for_Ubuntu-x86-64_170827/kdu_v_compress'
