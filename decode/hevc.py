@@ -10,7 +10,7 @@ height  = sys.argv[4]
 pix_fmt = sys.argv[5]
 depth   = sys.argv[6]
 
-hevc_bin = '/tools/HM-16.18+SCM-8.7/bin/TAppDecoderStatic'
+hevc_bin = '/tools/HM-16.18+SCM-8.7/bin/TAppDecoderHighBitDepthStatic'
 tmp_dec  = '/tmp/tmp.rgb'
 tmp_dec_yuv = '/tmp/tmp.yuv'
 

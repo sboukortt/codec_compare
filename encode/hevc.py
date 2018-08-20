@@ -12,7 +12,7 @@ height     = sys.argv[5]
 pix_fmt    = sys.argv[6]
 depth      = sys.argv[7]
 
-hevc_bin = '/tools/HM-16.18+SCM-8.7/bin/TAppEncoderStatic'
+hevc_bin = '/tools/HM-16.18+SCM-8.7/bin/TAppEncoderHighBitDepthStatic'
 if depth == '12' or depth == '16' or depth == '32' or pix_fmt == 'pgm':
     hevc_cfg = '/tools/HM-16.18+SCM-8.7/cfg/encoder_intra_main_rext.cfg'
 else:

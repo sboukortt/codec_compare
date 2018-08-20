@@ -52,7 +52,7 @@ RUN mkdir -p /tools && \
     cd /tools && \
     svn checkout https://hevc.hhi.fraunhofer.de/svn/svn_HEVCSoftware/tags/HM-16.18+SCM-8.7/ && \
     cd HM-16.18+SCM-8.7/build/linux && \
-    make
+    make release_highbitdepth
 
 # VMAF, FFMPEG
 RUN mkdir -p /tools && \
